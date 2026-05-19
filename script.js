@@ -6,6 +6,25 @@
 
 // ── Chart ───────────────────────────────────────────────
 let sensorChart = null;
+const CHART_JS_SRC = 'https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js';
+let chartJsPromise = null;
+
+function loadChartJs() {
+  if (window.Chart) return Promise.resolve();
+  if (chartJsPromise) return chartJsPromise;
+
+  chartJsPromise = new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    script.src = CHART_JS_SRC;
+    script.defer = true;
+    script.dataset.chartjs = 'true';
+    script.onload = () => resolve();
+    script.onerror = () => reject(new Error('Gagal memuat Chart.js'));
+    document.head.appendChild(script);
+  });
+
+  return chartJsPromise;
+}
 
 const CHART_COLORS = {
   suhu:   { stroke: '#fb923c', cls: 'active-temp'  },
@@ -14,9 +33,11 @@ const CHART_COLORS = {
   cahaya: { stroke: '#facc15', cls: 'active-light' },
 };
 
-function createChart(label, data, times, color, unit = '%') {
+async function createChart(label, data, times, color, unit = '%') {
   const canvas = document.getElementById('chartSensor');
   if (!canvas) return;
+
+  await loadChartJs();
 
   try { if (sensorChart) { sensorChart.destroy(); sensorChart = null; } }
   catch(e) { sensorChart = null; }
@@ -74,7 +95,7 @@ function createChart(label, data, times, color, unit = '%') {
   });
 }
 
-function showChart(type) {
+async function showChart(type) {
   document.querySelectorAll('.chart-tab').forEach(btn => {
     btn.className = btn.className.replace(/active-\w+/, '').trim();
   });
@@ -83,10 +104,10 @@ function showChart(type) {
 
   const labels = window.chartLabels || [];
   switch (type) {
-    case 'suhu':   createChart('Suhu Udara',        window.dataSuhu,   labels, '#fb923c', '°C'); break;
-    case 'udara':  createChart('Kelembapan Udara',  window.dataUdara,  labels, '#38bdf8', '%');  break;
-    case 'tanah':  createChart('Kelembapan Tanah',  window.dataTanah,  labels, '#34d399', '%');  break;
-    case 'cahaya': createChart('Intensitas Cahaya', window.dataCahaya, labels, '#facc15', ' Lux');  break;
+    case 'suhu':   await createChart('Suhu Udara',        window.dataSuhu,   labels, '#fb923c', '°C'); break;
+    case 'udara':  await createChart('Kelembapan Udara',  window.dataUdara,  labels, '#38bdf8', '%');  break;
+    case 'tanah':  await createChart('Kelembapan Tanah',  window.dataTanah,  labels, '#34d399', '%');  break;
+    case 'cahaya': await createChart('Intensitas Cahaya', window.dataCahaya, labels, '#facc15', ' Lux');  break;
   }
 }
 
