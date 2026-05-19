@@ -86,7 +86,7 @@ function showChart(type) {
     case 'suhu':   createChart('Suhu Udara',        window.dataSuhu,   labels, '#fb923c', '°C'); break;
     case 'udara':  createChart('Kelembapan Udara',  window.dataUdara,  labels, '#38bdf8', '%');  break;
     case 'tanah':  createChart('Kelembapan Tanah',  window.dataTanah,  labels, '#34d399', '%');  break;
-    case 'cahaya': createChart('Intensitas Cahaya', window.dataCahaya, labels, '#facc15', '%');  break;
+    case 'cahaya': createChart('Intensitas Cahaya', window.dataCahaya, labels, '#facc15', ' Lux');  break;
   }
 }
 
@@ -114,7 +114,7 @@ function initRealTime() {
     updateSensorLive('.type-temp', suhu, '°C', 50);
     updateSensorLive('.type-humid', udara, '%', 100);
     updateSensorLive('.type-soil', tanah, '%', 100);
-    updateSensorLive('.type-light', cahaya, '%', 100);
+    updateSensorLive('.type-light', cahaya, ' Lux', 80000);
 
     // 2. Tambahkan data ke Chart secara dinamis
     if (window.chartLabels && sensorChart) {
@@ -147,10 +147,11 @@ function initRealTime() {
     checkSensorAlerts();
   };
 
-  sseConnection.onerror = function() {
-    console.warn("Koneksi Real-time terputus. Mencoba reconnect...");
-    sseConnection.close();
-    setTimeout(initRealTime, 3000); // Coba lagi dalam 3 detik
+  sseConnection.onerror = function(e) {
+    if (sseConnection.readyState === 2) { // EventSource.CLOSED = 2
+      console.warn("Koneksi Real-time terputus. Mencoba reconnect...");
+      setTimeout(initRealTime, 5000);
+    }
   };
 }
 
@@ -196,7 +197,7 @@ function setPompa(mode) {
 
   if (statusEl) statusEl.textContent = '···';
 
-  fetch(`control.php?mode=${encodeURIComponent(mode)}`)
+  fetch(`control.php?mode=${encodeURIComponent(mode)}&token=kangkung_123_farm_secure_token`)
     .then(res => res.text())
     .then(data => {
       const s = data.trim().toUpperCase();
@@ -214,8 +215,17 @@ function setPompa(mode) {
     });
 }
 
+function toggleSchedule() {
+  const btn   = document.getElementById('scheduleToggle');
+  const panel = document.getElementById('schedulePanel');
+  if (!btn || !panel) return;
+
+  const isOn = btn.dataset.on === 'true';
+  btn.dataset.on = String(!isOn);
+  panel.style.display = !isOn ? 'grid' : 'none';
+}
+
 // ── Toast notifications ──────────────────────────────────
-let toastCounter = 0;
 function showToast(msg, type = 'info') {
   const container = document.getElementById('toastContainer') || createToastContainer();
   const colors = { warn: '#f87171', ok: '#34d399', info: '#38bdf8' };
@@ -295,25 +305,88 @@ function initDashboard() {
 }
 
 function initRiwayat() {
-  if (sseConnection) sseConnection.close(); // Matikan real-time jika pindah ke riwayat
-  initTableSearch();
+  if (sseConnection) {
+    sseConnection.close();
+    sseConnection = null;
+  }
 }
 
-// Helper untuk riwayat tabel (sama seperti sebelumnya)
-function initTableSearch() {
-  const input = document.getElementById('searchInput');
-  const tbody = document.querySelector('.data-table tbody');
-  if (!input || !tbody) return;
-  input.addEventListener('input', () => {
-    const q = input.value.toLowerCase();
-    Array.from(tbody.querySelectorAll('tr')).forEach(row => {
-      row.style.display = row.textContent.toLowerCase().includes(q) ? '' : 'none';
-    });
+function exportCSV() {
+  const table = document.getElementById('dataTable');
+  if (!table) return;
+  const rows = [...table.querySelectorAll('tr')].map(row =>
+    [...row.querySelectorAll('th,td')].map(cell =>
+      `"${cell.textContent.trim().replace(/"/g, '""')}"`
+    ).join(',')
+  );
+  const blob = new Blob([rows.join('\n')], { type: 'text/csv;charset=utf-8;' });
+  const a = Object.assign(document.createElement('a'), {
+    href: URL.createObjectURL(blob),
+    download: `sensor_${new Date().toISOString().slice(0,10)}.csv`
   });
+  a.click();
 }
 
+// Call initialization on first load
 document.addEventListener('DOMContentLoaded', () => {
   initTheme();
   if (document.getElementById('chartSensor')) initDashboard();
   else initRiwayat();
 });
+
+// ── SPA Navigation (Pjax) ──────────────────────────────────
+document.addEventListener('click', function(e) {
+  const target = e.target.closest('a');
+  if (!target) return;
+  // Pastikan URL internal dan bukan _blank
+  if (target.hostname !== window.location.hostname || target.getAttribute('target') === '_blank') return;
+  if (target.classList.contains('no-spa')) return;
+  if (target.href.includes('#')) return;
+
+  e.preventDefault();
+  navigateTo(target.href);
+});
+
+window.addEventListener('popstate', function() {
+  navigateTo(window.location.href, false);
+});
+
+function navigateTo(url, push = true) {
+  const contentEl = document.getElementById('app-content');
+  if (contentEl) contentEl.style.opacity = '0.5';
+
+  fetch(url)
+    .then(res => res.text())
+    .then(html => {
+      const doc = new DOMParser().parseFromString(html, 'text/html');
+
+      // Update app-content
+      const newContent = doc.getElementById('app-content');
+      if (newContent && contentEl) {
+        contentEl.innerHTML = newContent.innerHTML;
+        contentEl.style.opacity = '1';
+      }
+      
+      // Update sidebar active class
+      const aPath = new URL(url).pathname.split('/').pop() || 'index.php';
+      const currentActive = document.querySelector('.side-nav-item.active');
+      if (currentActive) currentActive.classList.remove('active');
+      const newActive = document.querySelector(`.side-nav-item[href^="${aPath}"]`);
+      if (newActive) newActive.classList.add('active');
+
+      document.title = doc.title;
+      if (push) history.pushState({}, '', url);
+
+      // Jalankan skrip inisialisasi berdasarkan nama halaman
+      const pageName = new URL(url).pathname.split('/').pop() || 'index.php';
+      if (pageName === 'index.php' || pageName === '') {
+        initDashboard();
+      } else if (pageName === 'riwayat.php') {
+        initRiwayat();
+      }
+    })
+    .catch(err => {
+      console.error('SPA Error:', err);
+      window.location.assign(url); // fallback
+    });
+}

@@ -1,21 +1,11 @@
 <?php
-/**
- * post-esp-data.php — AgroMonitor v3
- * Endpoint POST dari firmware ESP32 untuk simpan data sensor
- *
- * Contoh request dari Arduino/ESP32:
- *   POST http://server/esp32_sensor/post-esp-data.php
- *   Body: suhuUdara=28.5&kelUdara=65&kelTanah=72&kecerahan=80&latitude=-5.1477&longitude=119.4327
- */
 
 header('Content-Type: application/json; charset=utf-8');
 
 include 'koneksi.php';
 
-// Tambahkan baris ini di atas pengecekan $required
-$valid_api_key = "12345abcde"; // Samakan dengan di Arduino
-
-if (!isset($_POST['api_key']) || $_POST['api_key'] !== $valid_api_key) {
+// Validasi API Key yang ada di koneksi.php
+if (!isset($_POST['api_key']) || $_POST['api_key'] !== ESP_API_KEY) {
     http_response_code(401);
     echo json_encode(['status'=>'error','message'=>'API Key Tidak Sah']);
     exit;

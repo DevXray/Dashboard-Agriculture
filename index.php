@@ -1,8 +1,5 @@
 <?php
-/**
- * index.php — AgroMonitor v3 (Emerald Night)
- * Dashboard utama sensor ESP32
- */
+
 include 'koneksi.php';
 
 // ── Ambil data terbaru ──────────────────────────────────────────
@@ -59,12 +56,13 @@ $sparkCahaya = last_n($cahaya, 12);
 $trendSuhu   = format_trend($suhu,   '°C');
 $trendUdara  = format_trend($udara,  '%');
 $trendTanah  = format_trend($tanah,  '%');
-$trendCahaya = format_trend($cahaya, '%');
+$trendCahaya = format_trend($cahaya, ' Lux');
 
 // ── Pompa ────────────────────────────────────────────────────────
 $pumpStatus = 'OFF';
-if (file_exists('relay_status.txt')) {
-    $pumpStatus = strtoupper(trim(file_get_contents('relay_status.txt')));
+$resCfg = mysqli_query($conn, "SELECT setting_value FROM DeviceConfig WHERE setting_name = 'relay_mode'");
+if ($resCfg && $rowCfg = mysqli_fetch_assoc($resCfg)) {
+    $pumpStatus = strtoupper(trim($rowCfg['setting_value']));
 }
 $isPumpOn   = $pumpStatus === 'ON';
 $isPumpAuto = $pumpStatus === 'AUTO';
@@ -73,7 +71,7 @@ $isPumpAuto = $pumpStatus === 'AUTO';
 $healthTemp  = clamp_pct(((float)$data['suhuUdara'] / 50) * 100);
 $healthUdara = clamp_pct($data['kelUdara']);
 $healthTanah = clamp_pct($data['kelTanah']);
-$healthCahaya= clamp_pct($data['kecerahan']);
+$healthCahaya= min(100, max(0, ($data['kecerahan'] / 50000) * 100)); // konversi Lux (skala target 50000) ke persentase bar
 $tempOptimal = max(0, 100 - abs((float)$data['suhuUdara'] - 28) * 8);
 
 // ── Stats (avg/min/max 20 data terakhir) ─────────────────────────
@@ -109,11 +107,11 @@ $rk[] = [
         : ($ku > 90 ? 'Kelembapan sangat tinggi. Waspadai jamur/embun tepung pada daun.' : 'Kelembapan udara ideal untuk respirasi kangkung.'),
 ];
 $rk[] = [
-    'icon' => '☀️', 'label' => 'Cahaya', 'val' => number_format($kc,0).'%',
-    'cls'  => $kc < 40 ? 'amber' : '',
-    'text' => $kc < 40
-        ? 'Cahaya kurang (<40%). Fotosintesis terhambat — daun bisa menjadi pucat.'
-        : 'Cahaya matahari cukup untuk pertumbuhan daun hijau yang maksimal.',
+    'icon' => '☀️', 'label' => 'Cahaya', 'val' => number_format($kc,0).' Lux',
+    'cls'  => $kc < 10000 ? 'amber' : '',
+    'text' => $kc < 10000
+        ? 'Cahaya kurang (<10.000 Lux). Fotosintesis terhambat — rentan mengalami etiolasi.'
+        : 'Cahaya optimal. Kebutuhan 20.000 - 50.000 Lux terpenuhi.',
 ];
 
 // ── Waktu & koordinat ────────────────────────────────────────────
@@ -164,117 +162,44 @@ $latestDataJson = json_encode([
 
     <!-- ── Sensor Cards ──────────────────────────────────────── -->
     <section class="sensor-grid">
+        <?php
+        $cards = [
+            ['type' => 'temp',  'label' => 'Suhu Udara',       'val' => $su, 'val_fmt' => number_format($su,1), 'unit' => '°C', 'trend' => $trendSuhu,   'max' => 50,  'color_var' => '--c-temp',  'spark' => $sparkSuhu,   'stat' => $statSuhu],
+            ['type' => 'humid', 'label' => 'Kelembapan Udara', 'val' => $ku, 'val_fmt' => number_format($ku,0), 'unit' => '%',  'trend' => $trendUdara,  'max' => 100, 'color_var' => '--c-humid', 'spark' => $sparkUdara,  'stat' => $statUdara],
+            ['type' => 'soil',  'label' => 'Kelembapan Tanah', 'val' => $kt, 'val_fmt' => number_format($kt,0), 'unit' => '%',  'trend' => $trendTanah,  'max' => 100, 'color_var' => '--c-soil',  'spark' => $sparkTanah,  'stat' => $statTanah],
+            ['type' => 'light', 'label' => 'Intensitas Cahaya','val' => $kc, 'val_fmt' => number_format($kc,0), 'unit' => ' Lux',  'trend' => $trendCahaya, 'max' => 80000, 'color_var' => '--c-light', 'spark' => $sparkCahaya, 'stat' => $statCahaya]
+        ];
 
-        <!-- Suhu -->
-        <div class="sensor-card type-temp">
+        foreach ($cards as $c): 
+            $pct = min($c['val'] / $c['max'], 1);
+            $dashoffset = 2 * M_PI * 20 * (1 - $pct);
+        ?>
+        <div class="sensor-card type-<?= $c['type'] ?>">
             <div class="card-top">
                 <div>
-                    <div class="card-label">Suhu Udara</div>
-                    <div class="card-value"><?= number_format($su,1) ?><span class="card-unit">°C</span></div>
+                    <div class="card-label"><?= $c['label'] ?></div>
+                    <div class="card-value"><?= $c['val_fmt'] ?><span class="card-unit"><?= $c['unit'] ?></span></div>
                     <div class="card-trend">
-                        <span class="card-trend-dot"></span><?= $trendSuhu ?>
-                    </div>
-                </div>
-                <!-- Radial gauge SVG -->
-                <svg class="gauge-svg" width="52" height="52">
-                    <circle cx="26" cy="26" r="20" fill="none" stroke="rgba(255,255,255,0.05)" stroke-width="3"/>
-                    <circle cx="26" cy="26" r="20" fill="none" stroke="var(--c-temp)" stroke-width="3"
-                            stroke-linecap="round"
-                            stroke-dasharray="<?= 2*M_PI*20 ?>"
-                            stroke-dashoffset="<?= 2*M_PI*20*(1-min($su/50,1)) ?>"
-                            style="transition:stroke-dashoffset 1.2s ease;filter:drop-shadow(0 0 4px var(--c-temp))"/>
-                </svg>
-            </div>
-            <div class="spark-bars" data-vals='<?= htmlspecialchars(json_encode($sparkSuhu)) ?>'></div>
-            <!-- Stats mini -->
-            <div class="stats-mini">
-                <span>AVG <?= $statSuhu['avg'] ?>°C</span>
-                <span>MIN <?= $statSuhu['min'] ?></span>
-                <span>MAX <?= $statSuhu['max'] ?></span>
-            </div>
-        </div>
-
-        <!-- Kelembapan Udara -->
-        <div class="sensor-card type-humid">
-            <div class="card-top">
-                <div>
-                    <div class="card-label">Kelembapan Udara</div>
-                    <div class="card-value"><?= number_format($ku,0) ?><span class="card-unit">%</span></div>
-                    <div class="card-trend">
-                        <span class="card-trend-dot"></span><?= $trendUdara ?>
+                        <span class="card-trend-dot"></span><?= $c['trend'] ?>
                     </div>
                 </div>
                 <svg class="gauge-svg" width="52" height="52">
                     <circle cx="26" cy="26" r="20" fill="none" stroke="rgba(255,255,255,0.05)" stroke-width="3"/>
-                    <circle cx="26" cy="26" r="20" fill="none" stroke="var(--c-humid)" stroke-width="3"
+                    <circle cx="26" cy="26" r="20" fill="none" stroke="var(<?= $c['color_var'] ?>)" stroke-width="3"
                             stroke-linecap="round"
                             stroke-dasharray="<?= 2*M_PI*20 ?>"
-                            stroke-dashoffset="<?= 2*M_PI*20*(1-min($ku/100,1)) ?>"
-                            style="transition:stroke-dashoffset 1.2s ease;filter:drop-shadow(0 0 4px var(--c-humid))"/>
+                            stroke-dashoffset="<?= $dashoffset ?>"
+                            style="transition:stroke-dashoffset 1.2s ease;filter:drop-shadow(0 0 4px var(<?= $c['color_var'] ?>))"/>
                 </svg>
             </div>
-            <div class="spark-bars" data-vals='<?= htmlspecialchars(json_encode($sparkUdara)) ?>'></div>
+            <div class="spark-bars" data-vals='<?= htmlspecialchars(json_encode($c['spark'])) ?>'></div>
             <div class="stats-mini">
-                <span>AVG <?= $statUdara['avg'] ?>%</span>
-                <span>MIN <?= $statUdara['min'] ?></span>
-                <span>MAX <?= $statUdara['max'] ?></span>
+                <span>AVG <?= $c['stat']['avg'] ?><?= $c['unit'] === '°C' ? '°C' : '%' ?></span>
+                <span>MIN <?= $c['stat']['min'] ?></span>
+                <span>MAX <?= $c['stat']['max'] ?></span>
             </div>
         </div>
-
-        <!-- Kelembapan Tanah -->
-        <div class="sensor-card type-soil">
-            <div class="card-top">
-                <div>
-                    <div class="card-label">Kelembapan Tanah</div>
-                    <div class="card-value"><?= number_format($kt,0) ?><span class="card-unit">%</span></div>
-                    <div class="card-trend">
-                        <span class="card-trend-dot"></span><?= $trendTanah ?>
-                    </div>
-                </div>
-                <svg class="gauge-svg" width="52" height="52">
-                    <circle cx="26" cy="26" r="20" fill="none" stroke="rgba(255,255,255,0.05)" stroke-width="3"/>
-                    <circle cx="26" cy="26" r="20" fill="none" stroke="var(--c-soil)" stroke-width="3"
-                            stroke-linecap="round"
-                            stroke-dasharray="<?= 2*M_PI*20 ?>"
-                            stroke-dashoffset="<?= 2*M_PI*20*(1-min($kt/100,1)) ?>"
-                            style="transition:stroke-dashoffset 1.2s ease;filter:drop-shadow(0 0 4px var(--c-soil))"/>
-                </svg>
-            </div>
-            <div class="spark-bars" data-vals='<?= htmlspecialchars(json_encode($sparkTanah)) ?>'></div>
-            <div class="stats-mini">
-                <span>AVG <?= $statTanah['avg'] ?>%</span>
-                <span>MIN <?= $statTanah['min'] ?></span>
-                <span>MAX <?= $statTanah['max'] ?></span>
-            </div>
-        </div>
-
-        <!-- Intensitas Cahaya -->
-        <div class="sensor-card type-light">
-            <div class="card-top">
-                <div>
-                    <div class="card-label">Intensitas Cahaya</div>
-                    <div class="card-value"><?= number_format($kc,0) ?><span class="card-unit">%</span></div>
-                    <div class="card-trend">
-                        <span class="card-trend-dot"></span><?= $trendCahaya ?>
-                    </div>
-                </div>
-                <svg class="gauge-svg" width="52" height="52">
-                    <circle cx="26" cy="26" r="20" fill="none" stroke="rgba(255,255,255,0.05)" stroke-width="3"/>
-                    <circle cx="26" cy="26" r="20" fill="none" stroke="var(--c-light)" stroke-width="3"
-                            stroke-linecap="round"
-                            stroke-dasharray="<?= 2*M_PI*20 ?>"
-                            stroke-dashoffset="<?= 2*M_PI*20*(1-min($kc/100,1)) ?>"
-                            style="transition:stroke-dashoffset 1.2s ease;filter:drop-shadow(0 0 4px var(--c-light))"/>
-                </svg>
-            </div>
-            <div class="spark-bars" data-vals='<?= htmlspecialchars(json_encode($sparkCahaya)) ?>'></div>
-            <div class="stats-mini">
-                <span>AVG <?= $statCahaya['avg'] ?>%</span>
-                <span>MIN <?= $statCahaya['min'] ?></span>
-                <span>MAX <?= $statCahaya['max'] ?></span>
-            </div>
-        </div>
-
+        <?php endforeach; ?>
     </section><!-- /sensor-grid -->
 
     <!-- ── Chart ─────────────────────────────────────────────── -->
@@ -333,7 +258,7 @@ $latestDataJson = json_encode([
                     ['🌡️','Suhu',     number_format($su,1).'°C'],
                     ['💧','Udara',    number_format($ku,0).'%' ],
                     ['🌱','Tanah',    number_format($kt,0).'%' ],
-                    ['☀️','Cahaya',   number_format($kc,0).'%' ],
+                    ['☀️','Cahaya',   number_format($kc,0).' Lux' ],
                 ];
                 foreach ($wItems as [$icon,$label,$val]):
                 ?>
@@ -446,7 +371,7 @@ $latestDataJson = json_encode([
             <div class="health-bar"><div class="health-fill fill-amber" data-pct="<?= $tempOptimal ?>"></div></div>
         </div>
         <div class="health-bar-wrap">
-            <div class="health-label"><span>Intensitas Cahaya</span><span><?= number_format($healthCahaya,0) ?>%</span></div>
+            <div class="health-label"><span>Intensitas Cahaya</span><span><?= number_format($kc, 0) ?> Lux</span></div>
             <div class="health-bar"><div class="health-fill fill-lime" data-pct="<?= $healthCahaya ?>"></div></div>
         </div>
         <div class="health-badge <?= $healthBadgeClass ?>"><?= $healthBadgeText ?></div>
@@ -457,11 +382,11 @@ $latestDataJson = json_encode([
         <div class="side-box-title">Info Sistem</div>
         <?php
         $sysInfo = [
-            ['Device',   'ESP32-S3'],
-            ['Firmware', 'v2.4.1'],
-            ['Interval', '3 menit'],
-            ['Uptime',   '3d 14h'],
-            ['RSSI',     '-67 dBm'],
+            ['Device',   'ESP32'],
+            ['Firmware', 'N/A'],
+            ['Interval', '5 detik'],
+            ['Uptime',   'N/A'],
+            ['RSSI',     'N/A'],
             ['Update',   $lastUpdate],
         ];
         foreach ($sysInfo as [$k,$v]):
