@@ -4,12 +4,12 @@
 #include "esp_wifi.h"   // ← untuk WiFi modem sleep
 
 // ===== WIFI =====
-const char* ssid = "ilmi";
-const char* password = "31102006";
+const char* ssid = "your SSID WiFi";
+const char* password = "your WiFi Password";
 
 // ===== SERVER =====
-const char* serverName = "http://192.168.1.6/esp32_sensorV3/post-esp-data.php";
-const char* controlURL = "http://192.168.1.6/esp32_sensorV3/control.php";
+const char* serverName = "https://kangkungfarm.my.id/post-esp-data.php";
+const char* controlURL = "https://kangkungfarm.my.id/control.php";
 
 // ===== API =====
 String apiKey = "12345abcde";
@@ -120,6 +120,9 @@ void connectWiFi() {
 // ===================================================
 // SETUP
 // ===================================================
+String currentMode = "AUTO";
+WiFiClientSecure secureClient; // <-- Objek global, hanya dibuat sekali
+
 void setup() {
   Serial.begin(115200);
   delay(2000);
@@ -133,6 +136,9 @@ void setup() {
   analogReadResolution(12);
 
   connectWiFi();
+  
+  // Lewati validasi SSL/HTTPS. Cukup dieksekusi 1 kali saat booting
+  secureClient.setInsecure(); 
 }
 
 // ===== TIMING (Non-blocking) =====
@@ -160,10 +166,9 @@ void loop() {
   if (currentMillis - lastWebCheck >= WEB_INTERVAL) {
     lastWebCheck = currentMillis;
     
-    String mode = "AUTO";
     HTTPClient http;
     http.setTimeout(3000);
-    http.begin(controlURL);
+    http.begin(secureClient, controlURL);
     int code = http.GET();
 
     if (code == 200) {
@@ -171,7 +176,7 @@ void loop() {
       tmp.trim();
       tmp.toUpperCase();
       if (tmp == "ON" || tmp == "OFF" || tmp == "AUTO") {
-        mode = tmp;
+        currentMode = tmp;
       }
     } else {
       Serial.print("[WARN] Gagal ambil mode web, HTTP code: ");
@@ -182,9 +187,9 @@ void loop() {
     // --- Kontrol Relay / MOSFET Sementara (berdasarkan data lalu) ---
     // Aturan autoON akan di-re-evaluasi saat baca sensor,
     // di sini kita hanya update jika ada intervensi manual web
-    if (mode == "ON") {
+    if (currentMode == "ON") {
       digitalWrite(RELAY_PIN, RELAY_ON_LEVEL);
-    } else if (mode == "OFF") {
+    } else if (currentMode == "OFF") {
       digitalWrite(RELAY_PIN, RELAY_OFF_LEVEL);
     }
   }
@@ -200,8 +205,9 @@ void loop() {
     int soilPersen = map(soil, SOIL_KERING, SOIL_BASAH, 0, 100);
     soilPersen = constrain(soilPersen, 0, 100);
 
-    int cahaya = map(ldr, 4095, 0, 0, 100);
-    cahaya = constrain(cahaya, 0, 100);
+    // Kangkung optimal pada cahaya tinggi (Full Sun). Mapping ADC (4095-0) ke skala Lux (0 - 100.000)
+    long cahaya = map(ldr, 4095, 0, 0, 100000);
+    cahaya = constrain(cahaya, 0, 100000);
 
     // --- Baca DHT22 ---
     float suhu, hum;
@@ -216,21 +222,10 @@ void loop() {
     Serial.print("Soil      : "); Serial.print(soilPersen); Serial.println(" %");
     Serial.print("Suhu      : "); Serial.print(suhu, 2);    Serial.println(" C");
     Serial.print("Kelembapan: "); Serial.print(hum, 2);     Serial.println(" %");
-    Serial.print("Cahaya    : "); Serial.print(cahaya);     Serial.println(" %");
+    Serial.print("Cahaya    : "); Serial.print(cahaya);     Serial.println(" Lux");
 
     // Re-evaluasi mode auto setelah baca soil baru
     bool autoON = (soilPersen < 60);
-
-    HTTPClient httpMode;
-    httpMode.setTimeout(2000);
-    httpMode.begin(controlURL);
-    String currentMode = "AUTO";
-    if (httpMode.GET() == 200) {
-       currentMode = httpMode.getString();
-       currentMode.trim();
-       currentMode.toUpperCase();
-    }
-    httpMode.end();
     
     Serial.println("===== MODE WEB =====");
     Serial.println(currentMode);
@@ -255,15 +250,14 @@ void loop() {
     // --- Kirim Data ke Server ---
     HTTPClient http2;
     http2.setTimeout(3000);
-    http2.begin(serverName);
+    http2.begin(secureClient, serverName);
     http2.addHeader("Content-Type", "application/x-www-form-urlencoded");
 
-    String postData =
-      "api_key="    + apiKey +
-      "&kelTanah="  + String(soilPersen) +
-      "&kelUdara="  + String(hum, 2) +
-      "&suhuUdara=" + String(suhu, 2) +
-      "&kecerahan=" + String(cahaya);
+    // Efisiensi memori (mengganti operator + di String bawaan)
+    char postData[128];
+    snprintf(postData, sizeof(postData),
+        "api_key=%s&kelTanah=%d&kelUdara=%.2f&suhuUdara=%.2f&kecerahan=%ld",
+        apiKey.c_str(), soilPersen, hum, suhu, cahaya);
 
     int postCode = http2.POST(postData);
 

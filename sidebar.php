@@ -21,7 +21,7 @@ if (isset($data)) {
     } elseif (isset($data['suhuUdara']) && (float)$data['suhuUdara'] > 32) {
         $plantState   = 'hot';
         $plantMessage = 'Fiuh.. Tolong, saya kepanasan! 🥵';
-    } elseif (isset($data['kecerahan']) && (float)$data['kecerahan'] < 40) {
+    } elseif (isset($data['kecerahan']) && (float)$data['kecerahan'] < 10000) {
         $plantState   = 'sad';
         $plantMessage = 'Gelap sekali... butuh cahaya. 🌑';
     }
@@ -53,7 +53,14 @@ $lc = $leafColors[$plantState] ?? $leafColors['happy'];
     <!-- Live Clock -->
     <div class="sidebar-clock">
         <div class="clock-time" id="sidebarClock"><?= date('H:i:s') ?></div>
-        <div class="clock-date"><?= strftime('%A, %d %B %Y') ?? date('l, d F Y') ?></div>
+        <div class="clock-date">
+<?php
+// Fallback jika Intl extension belum diaktifkan di XAMPP/VPS
+$hari = ['Sunday'=>'Minggu','Monday'=>'Senin','Tuesday'=>'Selasa','Wednesday'=>'Rabu','Thursday'=>'Kamis','Friday'=>'Jumat','Saturday'=>'Sabtu'];
+$bulan = ['January'=>'Januari','February'=>'Februari','March'=>'Maret','April'=>'April','May'=>'Mei','June'=>'Juni','July'=>'Juli','August'=>'Agustus','September'=>'September','October'=>'Oktober','November'=>'November','December'=>'Desember'];
+echo strtr(date('l, d F Y'), array_merge($hari, $bulan));
+?>
+        </div>
     </div>
 
     <!-- Navigation -->

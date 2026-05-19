@@ -25,6 +25,11 @@ if ($res && $row = $res->fetch_assoc()) {
 // Buka koneksi selama 60 detik (browser akan otomatis reconnect setelah ini)
 $startTime = time();
 while (time() - $startTime < 60) {
+    if (!$conn->ping()) {
+        $conn->close();
+        include 'koneksi.php'; // Reconnect jika terputus
+    }
+
     // Cari data yang ID-nya lebih besar dari ID terakhir yang dikirim
     $query = "SELECT * FROM DataSensor WHERE id > $lastId ORDER BY id ASC";
     $result = $conn->query($query);

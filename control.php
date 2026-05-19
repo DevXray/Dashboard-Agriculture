@@ -13,6 +13,12 @@ include 'koneksi.php';
 $allowed = ['ON', 'OFF', 'AUTO'];
 
 if (isset($_GET['mode'])) {
+    $token = $_GET['token'] ?? '';
+    if (!hash_equals(CONTROL_TOKEN, $token)) {
+        http_response_code(403);
+        exit('Forbidden');
+    }
+
     $mode = strtoupper(trim($_GET['mode']));
     if (in_array($mode, $allowed, true)) {
         $stmt = $conn->prepare("UPDATE DeviceConfig SET setting_value = ? WHERE setting_name = 'relay_mode'");

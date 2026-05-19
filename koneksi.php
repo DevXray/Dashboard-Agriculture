@@ -9,6 +9,9 @@ define('DB_USER', 'root');
 define('DB_PASS', '');
 define('DB_NAME', 'sensor_esp32');
 
+// Token untuk mengamankan aksi kontrol pada control.php
+define('CONTROL_TOKEN', 'kangkung_123_farm_secure_token');
+
 // API Key default untuk ESP32
 define('ESP_API_KEY', '12345abcde');
 

@@ -86,7 +86,7 @@ function showChart(type) {
     case 'suhu':   createChart('Suhu Udara',        window.dataSuhu,   labels, '#fb923c', '°C'); break;
     case 'udara':  createChart('Kelembapan Udara',  window.dataUdara,  labels, '#38bdf8', '%');  break;
     case 'tanah':  createChart('Kelembapan Tanah',  window.dataTanah,  labels, '#34d399', '%');  break;
-    case 'cahaya': createChart('Intensitas Cahaya', window.dataCahaya, labels, '#facc15', '%');  break;
+    case 'cahaya': createChart('Intensitas Cahaya', window.dataCahaya, labels, '#facc15', ' Lux');  break;
   }
 }
 
@@ -114,7 +114,7 @@ function initRealTime() {
     updateSensorLive('.type-temp', suhu, '°C', 50);
     updateSensorLive('.type-humid', udara, '%', 100);
     updateSensorLive('.type-soil', tanah, '%', 100);
-    updateSensorLive('.type-light', cahaya, '%', 100);
+    updateSensorLive('.type-light', cahaya, ' Lux', 80000);
 
     // 2. Tambahkan data ke Chart secara dinamis
     if (window.chartLabels && sensorChart) {
@@ -197,7 +197,7 @@ function setPompa(mode) {
 
   if (statusEl) statusEl.textContent = '···';
 
-  fetch(`control.php?mode=${encodeURIComponent(mode)}`)
+  fetch(`control.php?mode=${encodeURIComponent(mode)}&token=kangkung_123_farm_secure_token`)
     .then(res => res.text())
     .then(data => {
       const s = data.trim().toUpperCase();
@@ -213,6 +213,16 @@ function setPompa(mode) {
       }
       showToast(s === 'ON' ? 'Pompa dinyalakan ✅' : s === 'AUTO' ? 'Mode AUTO aktif ⟳' : 'Pompa dimatikan ■', s === 'OFF' ? 'info' : 'ok');
     });
+}
+
+function toggleSchedule() {
+  const btn   = document.getElementById('scheduleToggle');
+  const panel = document.getElementById('schedulePanel');
+  if (!btn || !panel) return;
+
+  const isOn = btn.dataset.on === 'true';
+  btn.dataset.on = String(!isOn);
+  panel.style.display = !isOn ? 'grid' : 'none';
 }
 
 // ── Toast notifications ──────────────────────────────────
@@ -367,11 +377,12 @@ function navigateTo(url, push = true) {
       document.title = doc.title;
       if (push) history.pushState({}, '', url);
 
-      // Jalankan skrip inisialisasi untuk halaman yg baru diload
-      const pageScript = doc.getElementById('page-script');
-      if (pageScript) {
-        // Gunakan fungsi anonim untuk mengeksekusi isi script
-        new Function(pageScript.textContent)();
+      // Jalankan skrip inisialisasi berdasarkan nama halaman
+      const pageName = new URL(url).pathname.split('/').pop() || 'index.php';
+      if (pageName === 'index.php' || pageName === '') {
+        initDashboard();
+      } else if (pageName === 'riwayat.php') {
+        initRiwayat();
       }
     })
     .catch(err => {

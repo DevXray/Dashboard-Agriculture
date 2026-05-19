@@ -56,7 +56,7 @@ $sparkCahaya = last_n($cahaya, 12);
 $trendSuhu   = format_trend($suhu,   '°C');
 $trendUdara  = format_trend($udara,  '%');
 $trendTanah  = format_trend($tanah,  '%');
-$trendCahaya = format_trend($cahaya, '%');
+$trendCahaya = format_trend($cahaya, ' Lux');
 
 // ── Pompa ────────────────────────────────────────────────────────
 $pumpStatus = 'OFF';
@@ -71,7 +71,7 @@ $isPumpAuto = $pumpStatus === 'AUTO';
 $healthTemp  = clamp_pct(((float)$data['suhuUdara'] / 50) * 100);
 $healthUdara = clamp_pct($data['kelUdara']);
 $healthTanah = clamp_pct($data['kelTanah']);
-$healthCahaya= clamp_pct($data['kecerahan']);
+$healthCahaya= min(100, max(0, ($data['kecerahan'] / 50000) * 100)); // konversi Lux (skala target 50000) ke persentase bar
 $tempOptimal = max(0, 100 - abs((float)$data['suhuUdara'] - 28) * 8);
 
 // ── Stats (avg/min/max 20 data terakhir) ─────────────────────────
@@ -107,11 +107,11 @@ $rk[] = [
         : ($ku > 90 ? 'Kelembapan sangat tinggi. Waspadai jamur/embun tepung pada daun.' : 'Kelembapan udara ideal untuk respirasi kangkung.'),
 ];
 $rk[] = [
-    'icon' => '☀️', 'label' => 'Cahaya', 'val' => number_format($kc,0).'%',
-    'cls'  => $kc < 40 ? 'amber' : '',
-    'text' => $kc < 40
-        ? 'Cahaya kurang (<40%). Fotosintesis terhambat — daun bisa menjadi pucat.'
-        : 'Cahaya matahari cukup untuk pertumbuhan daun hijau yang maksimal.',
+    'icon' => '☀️', 'label' => 'Cahaya', 'val' => number_format($kc,0).' Lux',
+    'cls'  => $kc < 10000 ? 'amber' : '',
+    'text' => $kc < 10000
+        ? 'Cahaya kurang (<10.000 Lux). Fotosintesis terhambat — rentan mengalami etiolasi.'
+        : 'Cahaya optimal. Kebutuhan 20.000 - 50.000 Lux terpenuhi.',
 ];
 
 // ── Waktu & koordinat ────────────────────────────────────────────
@@ -167,7 +167,7 @@ $latestDataJson = json_encode([
             ['type' => 'temp',  'label' => 'Suhu Udara',       'val' => $su, 'val_fmt' => number_format($su,1), 'unit' => '°C', 'trend' => $trendSuhu,   'max' => 50,  'color_var' => '--c-temp',  'spark' => $sparkSuhu,   'stat' => $statSuhu],
             ['type' => 'humid', 'label' => 'Kelembapan Udara', 'val' => $ku, 'val_fmt' => number_format($ku,0), 'unit' => '%',  'trend' => $trendUdara,  'max' => 100, 'color_var' => '--c-humid', 'spark' => $sparkUdara,  'stat' => $statUdara],
             ['type' => 'soil',  'label' => 'Kelembapan Tanah', 'val' => $kt, 'val_fmt' => number_format($kt,0), 'unit' => '%',  'trend' => $trendTanah,  'max' => 100, 'color_var' => '--c-soil',  'spark' => $sparkTanah,  'stat' => $statTanah],
-            ['type' => 'light', 'label' => 'Intensitas Cahaya','val' => $kc, 'val_fmt' => number_format($kc,0), 'unit' => '%',  'trend' => $trendCahaya, 'max' => 100, 'color_var' => '--c-light', 'spark' => $sparkCahaya, 'stat' => $statCahaya]
+            ['type' => 'light', 'label' => 'Intensitas Cahaya','val' => $kc, 'val_fmt' => number_format($kc,0), 'unit' => ' Lux',  'trend' => $trendCahaya, 'max' => 80000, 'color_var' => '--c-light', 'spark' => $sparkCahaya, 'stat' => $statCahaya]
         ];
 
         foreach ($cards as $c): 
@@ -258,7 +258,7 @@ $latestDataJson = json_encode([
                     ['🌡️','Suhu',     number_format($su,1).'°C'],
                     ['💧','Udara',    number_format($ku,0).'%' ],
                     ['🌱','Tanah',    number_format($kt,0).'%' ],
-                    ['☀️','Cahaya',   number_format($kc,0).'%' ],
+                    ['☀️','Cahaya',   number_format($kc,0).' Lux' ],
                 ];
                 foreach ($wItems as [$icon,$label,$val]):
                 ?>
@@ -371,7 +371,7 @@ $latestDataJson = json_encode([
             <div class="health-bar"><div class="health-fill fill-amber" data-pct="<?= $tempOptimal ?>"></div></div>
         </div>
         <div class="health-bar-wrap">
-            <div class="health-label"><span>Intensitas Cahaya</span><span><?= number_format($healthCahaya,0) ?>%</span></div>
+            <div class="health-label"><span>Intensitas Cahaya</span><span><?= number_format($kc, 0) ?> Lux</span></div>
             <div class="health-bar"><div class="health-fill fill-lime" data-pct="<?= $healthCahaya ?>"></div></div>
         </div>
         <div class="health-badge <?= $healthBadgeClass ?>"><?= $healthBadgeText ?></div>
@@ -382,11 +382,11 @@ $latestDataJson = json_encode([
         <div class="side-box-title">Info Sistem</div>
         <?php
         $sysInfo = [
-            ['Device',   'ESP32-S3'],
-            ['Firmware', 'v2.4.1'],
-            ['Interval', '3 menit'],
-            ['Uptime',   '3d 14h'],
-            ['RSSI',     '-67 dBm'],
+            ['Device',   'ESP32'],
+            ['Firmware', 'N/A'],
+            ['Interval', '5 detik'],
+            ['Uptime',   'N/A'],
+            ['RSSI',     'N/A'],
             ['Update',   $lastUpdate],
         ];
         foreach ($sysInfo as [$k,$v]):

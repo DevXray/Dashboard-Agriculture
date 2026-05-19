@@ -148,7 +148,7 @@ $lastRefresh = date('H:i:s');
                     <td><span class="val-badge badge-amber"><?= number_format((float)$row['suhuUdara'],1) ?>°C</span></td>
                     <td><span class="val-badge badge-cyan"><?= number_format((float)$row['kelUdara'],0) ?>%</span></td>
                     <td><span class="val-badge badge-green"><?= number_format((float)$row['kelTanah'],0) ?>%</span></td>
-                    <td><span class="val-badge badge-lime"><?= number_format((float)$row['kecerahan'],0) ?>%</span></td>
+                    <td><span class="val-badge badge-lime"><?= number_format((float)$row['kecerahan'],0) ?> Lux</span></td>
                     <td class="td-dim"><?= htmlspecialchars($row['latitude']) ?></td>
                     <td class="td-dim"><?= htmlspecialchars($row['longitude']) ?></td>
                 </tr>
