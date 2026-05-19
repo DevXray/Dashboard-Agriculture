@@ -1,7 +1,8 @@
 #include <WiFi.h>
 #include <HTTPClient.h>
+#include <WiFiClientSecure.h> 
 #include <DHT.h>
-#include "esp_wifi.h"   // ← untuk WiFi modem sleep
+#include "esp_wifi.h"
 
 // ===== WIFI =====
 const char* ssid = "your SSID WiFi";
