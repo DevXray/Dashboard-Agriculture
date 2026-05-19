@@ -14,10 +14,13 @@ if (!$data) {
 }
 
 // ── Ambil riwayat 7 hari untuk chart ────────────────────────────
+// Batas data diperkecil supaya halaman tidak berat saat tabel sensor sudah besar.
+$chartLimit = 1500;
 $query = mysqli_query($conn, "
     SELECT * FROM DataSensor
     WHERE waktu >= NOW() - INTERVAL 7 DAY
-    ORDER BY waktu ASC
+    ORDER BY waktu DESC
+    LIMIT {$chartLimit}
 ");
 
 $waktu = []; $suhu = []; $udara = []; $tanah = []; $cahaya = [];
@@ -29,6 +32,12 @@ while ($row = mysqli_fetch_assoc($query)) {
     $tanah[]  = (float) $row['kelTanah'];
     $cahaya[] = (float) $row['kecerahan'];
 }
+
+$waktu  = array_reverse($waktu);
+$suhu   = array_reverse($suhu);
+$udara  = array_reverse($udara);
+$tanah  = array_reverse($tanah);
+$cahaya = array_reverse($cahaya);
 
 // ── Helper functions ─────────────────────────────────────────────
 function clamp_pct($v)       { return max(0, min(100, (float)$v)); }
@@ -139,7 +148,6 @@ $latestDataJson = json_encode([
     <title>AgroMonitor — Dashboard</title>
     <link rel="icon" href="img/kangkung.png">
     <link rel="stylesheet" href="style.css">
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 </head>
 <body>
 
@@ -419,7 +427,7 @@ $latestDataJson = json_encode([
     };
     if (typeof initDashboard === 'function') initDashboard();
 </script>
-<script src="script.js?v=<?= time() ?>"></script>
+<script src="script.js?v=<?= filemtime(__DIR__ . '/script.js') ?>"></script>
 
 </body>
 </html>

@@ -33,13 +33,13 @@ $types = '';
 switch ($filter) {
     case 'week':  $whereClauses[] = "waktu >= NOW() - INTERVAL 7 DAY"; break;
     case 'month': $whereClauses[] = "waktu >= NOW() - INTERVAL 30 DAY"; break;
-    default:      $whereClauses[] = "DATE(waktu) = CURDATE()"; break;
+    default:      $whereClauses[] = "waktu >= CURDATE() AND waktu < CURDATE() + INTERVAL 1 DAY"; break;
 }
 
 if ($search !== '') {
     $whereClauses[] = "(suhuUdara LIKE ? OR kelTanah LIKE ? OR kelUdara LIKE ? OR kecerahan LIKE ? OR waktu LIKE ?)";
     $searchWildcard = '%' . $search . '%';
-    // Bind 5 kali untuk masing-masing LIKE
+    
     for ($i = 0; $i < 5; $i++) {
         $params[] = $searchWildcard;
         $types .= 's';
@@ -84,7 +84,6 @@ $lastRefresh = date('H:i:s');
     <title>AgroMonitor — Riwayat Data</title>
     <link rel="icon" href="img/kangkung.png">
     <link rel="stylesheet" href="style.css">
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 </head>
 <body>
 
@@ -198,7 +197,7 @@ $lastRefresh = date('H:i:s');
 <script id="page-script">
     if (typeof initRiwayat === 'function') initRiwayat();
 </script>
-<script src="script.js?v=<?= time() ?>"></script>
+<script src="script.js?v=<?= filemtime(__DIR__ . '/script.js') ?>"></script>
 
 </body>
 </html>
