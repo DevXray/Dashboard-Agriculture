@@ -147,10 +147,11 @@ function initRealTime() {
     checkSensorAlerts();
   };
 
-  sseConnection.onerror = function() {
-    console.warn("Koneksi Real-time terputus. Mencoba reconnect...");
-    sseConnection.close();
-    setTimeout(initRealTime, 3000); // Coba lagi dalam 3 detik
+  sseConnection.onerror = function(e) {
+    if (sseConnection.readyState === 2) { // EventSource.CLOSED = 2
+      console.warn("Koneksi Real-time terputus. Mencoba reconnect...");
+      setTimeout(initRealTime, 5000);
+    }
   };
 }
 
@@ -215,7 +216,6 @@ function setPompa(mode) {
 }
 
 // ── Toast notifications ──────────────────────────────────
-let toastCounter = 0;
 function showToast(msg, type = 'info') {
   const container = document.getElementById('toastContainer') || createToastContainer();
   const colors = { warn: '#f87171', ok: '#34d399', info: '#38bdf8' };
@@ -295,25 +295,87 @@ function initDashboard() {
 }
 
 function initRiwayat() {
-  if (sseConnection) sseConnection.close(); // Matikan real-time jika pindah ke riwayat
-  initTableSearch();
+  if (sseConnection) {
+    sseConnection.close();
+    sseConnection = null;
+  }
 }
 
-// Helper untuk riwayat tabel (sama seperti sebelumnya)
-function initTableSearch() {
-  const input = document.getElementById('searchInput');
-  const tbody = document.querySelector('.data-table tbody');
-  if (!input || !tbody) return;
-  input.addEventListener('input', () => {
-    const q = input.value.toLowerCase();
-    Array.from(tbody.querySelectorAll('tr')).forEach(row => {
-      row.style.display = row.textContent.toLowerCase().includes(q) ? '' : 'none';
-    });
+function exportCSV() {
+  const table = document.getElementById('dataTable');
+  if (!table) return;
+  const rows = [...table.querySelectorAll('tr')].map(row =>
+    [...row.querySelectorAll('th,td')].map(cell =>
+      `"${cell.textContent.trim().replace(/"/g, '""')}"`
+    ).join(',')
+  );
+  const blob = new Blob([rows.join('\n')], { type: 'text/csv;charset=utf-8;' });
+  const a = Object.assign(document.createElement('a'), {
+    href: URL.createObjectURL(blob),
+    download: `sensor_${new Date().toISOString().slice(0,10)}.csv`
   });
+  a.click();
 }
 
+// Call initialization on first load
 document.addEventListener('DOMContentLoaded', () => {
   initTheme();
   if (document.getElementById('chartSensor')) initDashboard();
   else initRiwayat();
 });
+
+// ── SPA Navigation (Pjax) ──────────────────────────────────
+document.addEventListener('click', function(e) {
+  const target = e.target.closest('a');
+  if (!target) return;
+  // Pastikan URL internal dan bukan _blank
+  if (target.hostname !== window.location.hostname || target.getAttribute('target') === '_blank') return;
+  if (target.classList.contains('no-spa')) return;
+  if (target.href.includes('#')) return;
+
+  e.preventDefault();
+  navigateTo(target.href);
+});
+
+window.addEventListener('popstate', function() {
+  navigateTo(window.location.href, false);
+});
+
+function navigateTo(url, push = true) {
+  const contentEl = document.getElementById('app-content');
+  if (contentEl) contentEl.style.opacity = '0.5';
+
+  fetch(url)
+    .then(res => res.text())
+    .then(html => {
+      const doc = new DOMParser().parseFromString(html, 'text/html');
+
+      // Update app-content
+      const newContent = doc.getElementById('app-content');
+      if (newContent && contentEl) {
+        contentEl.innerHTML = newContent.innerHTML;
+        contentEl.style.opacity = '1';
+      }
+      
+      // Update sidebar active class
+      const aPath = new URL(url).pathname.split('/').pop() || 'index.php';
+      const currentActive = document.querySelector('.side-nav-item.active');
+      if (currentActive) currentActive.classList.remove('active');
+      const newActive = document.querySelector(`.side-nav-item[href^="${aPath}"]`);
+      if (newActive) newActive.classList.add('active');
+
+      document.title = doc.title;
+      if (push) history.pushState({}, '', url);
+
+      // Jalankan skrip inisialisasi untuk halaman yg baru diload
+      const pageScript = doc.getElementById('page-script');
+      if (pageScript) {
+        // Gunakan fungsi anonim untuk mengeksekusi isi script
+        new Function(pageScript.textContent)();
+      }
+    })
+    .catch(err => {
+      console.error('SPA Error:', err);
+      window.location.assign(url); // fallback
+    });
+}

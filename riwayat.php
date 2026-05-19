@@ -12,43 +12,67 @@ $isPumpOn   = false;
 $isPumpAuto = false;
 
 // Baca status pompa (opsional, agar mascot merespons)
-if (file_exists('relay_status.txt')) {
-    $ps      = strtoupper(trim(file_get_contents('relay_status.txt')));
+$resCfg = $conn->query("SELECT setting_value FROM DeviceConfig WHERE setting_name = 'relay_mode'");
+if ($resCfg && $rowCfg = $resCfg->fetch_assoc()) {
+    $ps = strtoupper(trim($rowCfg['setting_value']));
     $isPumpOn   = ($ps === 'ON');
     $isPumpAuto = ($ps === 'AUTO');
 }
 
 // ── Query data hari ini ──────────────────────────────────────────
-$filter    = isset($_GET['filter']) ? $conn->real_escape_string($_GET['filter']) : 'today';
-$search    = isset($_GET['search']) ? $conn->real_escape_string(trim($_GET['search'])) : '';
-$page      = max(1, (int)($_GET['page'] ?? 1));
-$perPage   = 20;
-$offset    = ($page - 1) * $perPage;
+$filter  = isset($_GET['filter']) ? $_GET['filter'] : 'today';
+$search  = isset($_GET['search']) ? trim($_GET['search']) : '';
+$page    = max(1, (int)($_GET['page'] ?? 1));
+$perPage = 20;
+$offset  = ($page - 1) * $perPage;
 
 $whereClauses = [];
+$params = [];
+$types = '';
+
 switch ($filter) {
     case 'week':  $whereClauses[] = "waktu >= NOW() - INTERVAL 7 DAY"; break;
     case 'month': $whereClauses[] = "waktu >= NOW() - INTERVAL 30 DAY"; break;
     default:      $whereClauses[] = "DATE(waktu) = CURDATE()"; break;
 }
+
 if ($search !== '') {
-    $whereClauses[] = "(suhuUdara LIKE '%{$search}%' OR kelTanah LIKE '%{$search}%'
-                        OR kelUdara LIKE '%{$search}%' OR kecerahan LIKE '%{$search}%'
-                        OR waktu LIKE '%{$search}%')";
+    $whereClauses[] = "(suhuUdara LIKE ? OR kelTanah LIKE ? OR kelUdara LIKE ? OR kecerahan LIKE ? OR waktu LIKE ?)";
+    $searchWildcard = '%' . $search . '%';
+    // Bind 5 kali untuk masing-masing LIKE
+    for ($i = 0; $i < 5; $i++) {
+        $params[] = $searchWildcard;
+        $types .= 's';
+    }
 }
 $whereSQL = $whereClauses ? 'WHERE ' . implode(' AND ', $whereClauses) : '';
 
-// Total count
-$countRes  = $conn->query("SELECT COUNT(*) as total FROM DataSensor {$whereSQL}");
-$totalRows = $countRes ? (int)$countRes->fetch_assoc()['total'] : 0;
+// ── Total count (Prepared Statement) ──
+$sqlCount = "SELECT COUNT(*) as total FROM DataSensor {$whereSQL}";
+if ($search !== '') {
+    $stmtCount = $conn->prepare($sqlCount);
+    $stmtCount->bind_param($types, ...$params);
+    $stmtCount->execute();
+    $totalRows = (int)$stmtCount->get_result()->fetch_assoc()['total'];
+    $stmtCount->close();
+} else {
+    $countRes  = $conn->query($sqlCount);
+    $totalRows = $countRes ? (int)$countRes->fetch_assoc()['total'] : 0;
+}
 $totalPages= max(1, (int)ceil($totalRows / $perPage));
 
-// Data page
-$result = $conn->query("
-    SELECT * FROM DataSensor {$whereSQL}
-    ORDER BY id DESC
-    LIMIT {$perPage} OFFSET {$offset}
-");
+// ── Data page (Prepared Statement) ──
+$sqlData = "SELECT * FROM DataSensor {$whereSQL} ORDER BY id DESC LIMIT ? OFFSET ?";
+$stmt = $conn->prepare($sqlData);
+if ($search !== '') {
+    $typesData = $types . 'ii';
+    $paramsData = array_merge($params, [$perPage, $offset]);
+    $stmt->bind_param($typesData, ...$paramsData);
+} else {
+    $stmt->bind_param('ii', $perPage, $offset);
+}
+$stmt->execute();
+$result = $stmt->get_result();
 
 $lastRefresh = date('H:i:s');
 ?>

@@ -7,6 +7,9 @@ header('Content-Type: text/event-stream');
 header('Cache-Control: no-cache');
 header('Connection: keep-alive');
 
+set_time_limit(0);
+ignore_user_abort(true);
+
 // Matikan buffering agar data langsung mengalir ke browser
 if (ob_get_level()) ob_end_clean();
 

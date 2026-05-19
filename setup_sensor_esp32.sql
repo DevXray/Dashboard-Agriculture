@@ -21,3 +21,11 @@ CREATE TABLE IF NOT EXISTS DataSensor (
   PRIMARY KEY (id),
   INDEX idx_waktu (waktu)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS DeviceConfig (
+  setting_name VARCHAR(50) NOT NULL,
+  setting_value VARCHAR(50) NOT NULL,
+  PRIMARY KEY (setting_name)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+INSERT IGNORE INTO DeviceConfig (setting_name, setting_value) VALUES ('relay_mode', 'OFF');
