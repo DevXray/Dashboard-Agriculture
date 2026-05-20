@@ -168,6 +168,18 @@ body { font-family:'Sora',sans-serif; background:var(--bg-void); color:var(--tx-
 .spark-bars { display:flex; align-items:flex-end; gap:2px; height:30px; margin-top:8px; }
 .spark-bar  { flex:1; border-radius:2px 2px 0 0; background:var(--card-accent,var(--em-300)); opacity:.5; min-width:4px; }
 
+/* ── Stats mini (di dalam sensor card) ──────────────────── */
+.stats-mini {
+  display: flex;
+  gap: 10px;
+  margin-top: 6px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  color: var(--tx-dim);
+  letter-spacing: 0.05em;
+}
+.stats-mini span { white-space: nowrap; }
+
 /* ── Stats bar ───────────────────────────────────────── */
 #statsBar { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-bottom:14px; }
 .stat-cell { background:var(--bg-surface); border-radius:9px; padding:8px 11px; border:1px solid var(--bd-faint); }
@@ -186,7 +198,50 @@ body { font-family:'Sora',sans-serif; background:var(--bg-void); color:var(--tx-
 .active-humid { border-color:var(--c-humid)!important; color:var(--c-humid)!important; background:rgba(56,189,248,.1)!important;  }
 .active-soil  { border-color:var(--c-soil)!important;  color:var(--c-soil)!important;  background:rgba(52,211,153,.1)!important;  }
 .active-light { border-color:var(--c-light)!important; color:var(--c-light)!important; background:rgba(250,204,21,.1)!important;  }
-#chartSensor  { max-height:220px; }
+.chart-toolbar { position:absolute; bottom:40px; left:15px; z-index:10; }
+.smoothness-control {
+  display:flex; align-items:center; gap:8px; flex-wrap:wrap;
+  padding:6px 12px; border-radius:8px;
+  background:rgba(255,255,255,0.7); backdrop-filter:blur(4px);
+  color:#333; font-size:11px; font-weight:600; font-family:'Sora', sans-serif;
+}
+[data-theme="dark"] .smoothness-control {
+  background:rgba(20,20,20,0.7); color:#eee;
+}
+.smoothness-control span { color:inherit; opacity:0.8; }
+.smoothness-control strong { font-family:'JetBrains Mono',monospace; opacity:0; display:none; }
+.smoothness-control input[type="range"] {
+  width:100px; accent-color:var(--em-300);
+  height:4px; appearance:auto; cursor:pointer;
+}
+.chart-stage {
+  position:relative;
+  min-height:360px;
+  border-radius:14px;
+  overflow:hidden;
+  border:1px solid var(--bd-faint);
+  background:linear-gradient(180deg, rgba(255,255,255,0.01), rgba(255,255,255,0));
+}
+#chartSensor { position:absolute; top:0; left:0; right:0; bottom:0; width:100%; height:100%; }
+.chart-loading {
+  position:absolute; inset:0;
+  display:flex; flex-direction:column; align-items:center; justify-content:center;
+  gap:10px; background:rgba(2,14,8,0.72); backdrop-filter:blur(8px);
+  opacity:0; pointer-events:none; transition:opacity .2s ease; z-index:5;
+}
+.chart-loading.is-visible { opacity:1; pointer-events:auto; }
+.chart-spinner {
+  width:36px; height:36px; border-radius:50%;
+  border:3px solid rgba(110,231,183,0.18); border-top-color:var(--em-300);
+  animation:chart-spin .8s linear infinite;
+}
+.chart-loading-text { font-size:12px; color:var(--tx-hi); letter-spacing:.02em; }
+.chart-empty {
+  display:flex; align-items:center; justify-content:center; height:100%; min-height:320px;
+  color:var(--tx-low); font-size:13px; text-align:center; padding:20px;
+}
+
+@keyframes chart-spin { to { transform:rotate(360deg); } }
 
 /* ── Bottom grid ─────────────────────────────────────── */
 .bottom-grid { display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:22px; }
@@ -309,29 +364,313 @@ body { font-family:'Sora',sans-serif; background:var(--bg-void); color:var(--tx-
 @keyframes pdot    { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.5;transform:scale(.8)} }
 
 /* ── Responsive ──────────────────────────────────────── */
-@media(max-width:1100px) {
-  .sensor-grid { grid-template-columns:repeat(2,1fr); }
-  .sidebar-panel { width:240px; }
-  .bottom-grid { grid-template-columns:1fr; }
-}
-@media(max-width:768px) {
-  body { padding-left:0; padding-top:60px; }
-  .agro-sidebar { position:fixed; top:auto; bottom:0; left:0; right:0; height:auto; width:100%;
-    flex-direction:row; padding:10px 16px; border-top:1px solid var(--bd-subtle); border-right:none;
-    overflow-x:auto; overflow-y:hidden; }
-  .app-layout { flex-direction:column; }
-  .sidebar-panel { width:100%; border-left:none; border-top:1px solid var(--bd-faint); padding:16px; }
-  .sensor-grid { grid-template-columns:repeat(2,1fr); }
-  .mascot-container,.sidebar-clock,.sidebar-bottom,.logo-sub { display:none; }
+
+/* ── Tablet (769px – 1100px) ── */
+@media(min-width:769px) and (max-width:1100px) {
+  .sensor-grid  { grid-template-columns:repeat(2,1fr); }
+  .sidebar-panel{ width:240px; }
+  .bottom-grid  { grid-template-columns:1fr; }
 }
 
-/* ── Stats mini (di dalam sensor card) ──────────────────── */
-.stats-mini {
-  display: flex; gap: 10px; margin-top: 6px;
-  font-family: 'JetBrains Mono', monospace; font-size: 10px;
-  color: var(--tx-dim); letter-spacing: 0.05em;
+/* ══════════════════════════════════════════════════════
+   MOBILE (≤768px) — Taskbar bawah + Pompa paling atas
+   ══════════════════════════════════════════════════════ */
+@media(max-width:768px) {
+
+  /* ── Body ──────────────────────────────────────────── */
+  body {
+    padding-left: 0;
+    padding-top: 0;
+    padding-bottom: 72px; /* ruang untuk taskbar */
+  }
+
+  /* ══ SIDEBAR → BOTTOM TASKBAR ══════════════════════ */
+  .agro-sidebar {
+    position: fixed;
+    top: auto;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    width: 100%;
+    height: 64px;
+    flex-direction: row;
+    padding: 0;
+    border-right: none;
+    border-top: 1px solid var(--bd-subtle);
+    overflow: hidden;
+    align-items: stretch;
+    z-index: 1000;
+    /* Hapus backdrop-filter di sini, pindah ke pseudo-element */
+  }
+
+  /* Sembunyikan semua elemen sidebar kecuali nav */
+  .agro-sidebar .logo-mark,
+  .agro-sidebar .sidebar-clock,
+  .agro-sidebar .mascot-container,
+  .agro-sidebar .sidebar-bottom {
+    display: none;
+  }
+
+  /* Menu nav → full-width tab bar */
+  .agro-sidebar .sidebar-menu {
+    flex-direction: row;
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    gap: 0;
+    align-items: stretch;
+  }
+
+  /* Setiap tab */
+  .agro-sidebar .side-nav-item {
+    flex: 1;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    gap: 3px;
+    padding: 6px 4px 8px;
+    border-radius: 0;
+    border: none;
+    border-top: 2px solid transparent;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    height: 100%;
+    text-align: center;
+    transition: all .2s;
+    color: var(--tx-low);
+  }
+
+  .agro-sidebar .side-nav-item svg {
+    width: 22px;
+    height: 22px;
+    flex-shrink: 0;
+  }
+
+  .agro-sidebar .side-nav-item:hover {
+    background: rgba(52,211,153,0.06);
+    border-top-color: var(--bd-subtle);
+    color: var(--tx-hi);
+  }
+
+  /* Tab aktif — indikator atas + warna */
+  .agro-sidebar .side-nav-item.active {
+    color: var(--em-300);
+    background: rgba(52,211,153,0.08);
+    border: none;
+    border-top: 2px solid var(--em-300);
+    box-shadow: none;
+  }
+
+  /* ══ APP LAYOUT ══════════════════════════════════════ */
+  .app-layout {
+    flex-direction: column;
+    display: flex;
+  }
+
+  /* Kontrol pompa muncul PERTAMA di mobile */
+  .sidebar-panel {
+    order: -1;
+    width: 100%;
+    border-left: none;
+    border-top: none;
+    border-bottom: 1px solid var(--bd-faint);
+    padding: 16px 16px 4px;
+  }
+
+  .main-content {
+    order: 0;
+    padding: 16px;
+  }
+
+  /* ══ MOBILE HEADER BAR ═══════════════════════════════ */
+  /* Header mini yang tampil di atas konten saat scroll */
+  .page-top {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: var(--bg-void);
+    border-bottom: 1px solid var(--bd-faint);
+    margin: -16px -16px 16px;
+    padding: 12px 16px;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .page-title-lg { font-size: 17px; }
+  .page-subtitle  { font-size: 10px; }
+  .node-badge     { font-size: 10px; padding: 4px 10px; }
+
+  /* ══ SENSOR CARDS ════════════════════════════════════ */
+  .sensor-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+    margin-bottom: 16px;
+  }
+
+  .sensor-card { padding: 13px; }
+
+  .card-label { font-size: 10px; }
+  .card-value { font-size: 22px; }
+  .card-unit  { font-size: 11px; }
+  .card-trend { font-size: 10px; }
+
+  .gauge-svg { width: 42px; height: 42px; }
+
+  .stats-mini { font-size: 9px; gap: 6px; }
+
+  /* ══ CHART ═══════════════════════════════════════════ */
+  .chart-box {
+    padding: 14px;
+    margin-bottom: 16px;
+  }
+
+  .chart-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+    margin-bottom: 10px;
+  }
+
+  /* Tabs chart → 4 kolom penuh */
+  .chart-tabs {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 4px;
+    width: 100%;
+  }
+
+  .chart-tab {
+    padding: 6px 2px;
+    font-size: 10px;
+    text-align: center;
+    border-radius: 7px;
+  }
+
+  .chart-toolbar { justify-content:stretch; }
+
+  .smoothness-control {
+    width:100%;
+    justify-content:space-between;
+    gap:8px;
+  }
+
+  .smoothness-control input[type="range"] {
+    width:100%;
+    max-width:none;
+  }
+
+  .chart-stage,
+  #chartSensor,
+  .chart-empty {
+    min-height:240px;
+    height:240px;
+  }
+
+  #statsBar {
+    gap: 6px;
+    margin-bottom: 10px;
+  }
+
+  .stat-v { font-size: 13px; }
+
+  /* ══ BOTTOM GRID ═════════════════════════════════════ */
+  .bottom-grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+
+  /* ══ SIDEBAR PANEL (POMPA + HEALTH + INFO) ═══════════ */
+
+  /* Pompa: visualnya lebih kompak */
+  .pump-ring {
+    width: 64px;
+    height: 64px;
+  }
+
+  /* Tombol pompa: touch target yang besar */
+  .pump-btn {
+    padding: 11px 8px;
+    font-size: 12px;
+  }
+
+  /* Sembunyikan Info Sistem di mobile (tidak kritis) */
+  .sidebar-panel .side-box:nth-child(3) {
+    display: none;
+  }
+
+  /* Side box lebih compact */
+  .side-box {
+    padding: 14px;
+    margin-bottom: 10px;
+  }
+
+  /* ══ RIWAYAT ═════════════════════════════════════════ */
+  .riwayat-content { padding: 16px; }
+
+  .page-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+    margin-bottom: 14px;
+  }
+
+  .page-title { font-size: 18px; }
+
+  /* Filter pills scroll horizontal */
+  .page-header > div:last-child {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .filter-pill { padding: 5px 12px; font-size: 11px; }
+
+  .filter-bar { flex-wrap: wrap; gap: 8px; }
+
+  .search-input { min-width: 0; font-size: 12px; }
+
+  .export-btn { padding: 9px 12px; font-size: 11px; }
+
+  /* Tabel scroll horizontal */
+  .table-wrap { border-radius: 10px; }
+
+  .data-table {
+    min-width: 580px; /* paksa scroll horizontal */
+  }
+
+  .data-table th { padding: 9px 10px; font-size: 9px; }
+  .data-table td { padding: 9px 10px; font-size: 12px; }
+
+  /* Pagination compact */
+  .pagination { gap: 4px; margin-top: 14px; }
+
+  .pg-btn {
+    width: 32px;
+    height: 32px;
+    font-size: 12px;
+    border-radius: 8px;
+  }
+
+  .pg-info { font-size: 11px; }
+
+  /* ══ TOAST ═══════════════════════════════════════════ */
+  /* Toast turun sedikit agar tidak tertutup taskbar */
+  #toastContainer {
+    bottom: 76px !important;
+    right: 12px !important;
+  }
 }
-.stats-mini span { white-space: nowrap; }
+
+/* ── Tambahan: layar sangat kecil (≤380px) ─────────── */
+@media(max-width:380px) {
+  .sensor-grid { gap: 8px; }
+  .sensor-card { padding: 11px; }
+  .card-value  { font-size: 20px; }
+  .chart-tab   { font-size: 9px; padding: 5px 1px; }
+  .pump-btn    { padding: 10px 4px; font-size: 11px; }
+}
 
 /* ── Rekomendasi val badge ───────────────────────────────── */
 .rk-val-badge {
