@@ -83,7 +83,7 @@ $lastRefresh = date('H:i:s');
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AgroMonitor — Riwayat Data</title>
     <link rel="icon" href="img/kangkung.png">
-    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="style.css?v=<?= filemtime(__DIR__ . '/style.css') ?>">
 </head>
 <body>
 
