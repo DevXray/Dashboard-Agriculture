@@ -13,19 +13,45 @@ if (!$data) {
     ];
 }
 
-// ── Ambil riwayat 7 hari untuk chart ────────────────────────────
-// Batas data diperkecil supaya halaman tidak berat saat tabel sensor sudah besar.
-$chartLimit = 1500;
-$query = mysqli_query($conn, "
+// ── Ambil riwayat harian untuk chart (±15 titik) ────────────────
+$chartQuery = mysqli_query($conn, "
+    SELECT
+        DATE(waktu) AS chart_day,
+        AVG(suhuUdara) AS suhuUdara,
+        AVG(kelUdara) AS kelUdara,
+        AVG(kelTanah) AS kelTanah,
+        AVG(kecerahan) AS kecerahan
+    FROM DataSensor
+    WHERE waktu >= NOW() - INTERVAL 15 DAY
+    GROUP BY DATE(waktu)
+    ORDER BY chart_day ASC
+    LIMIT 15
+");
+
+$chartDaily = [];
+while ($row = mysqli_fetch_assoc($chartQuery)) {
+    $dayTs = strtotime($row['chart_day']);
+    $chartDaily[] = [
+        'date'    => $dayTs ? ($dayTs * 1000) : null,
+        'label'   => $dayTs ? date('d M', $dayTs) : '-',
+        'suhu'    => round((float) $row['suhuUdara'], 1),
+        'udara'   => round((float) $row['kelUdara'], 1),
+        'tanah'   => round((float) $row['kelTanah'], 1),
+        'cahaya'  => round((float) $row['kecerahan'], 1),
+    ];
+}
+
+// ── Ambil riwayat mentah untuk spark, trend, dan statistik ─────
+$historyQuery = mysqli_query($conn, "
     SELECT * FROM DataSensor
     WHERE waktu >= NOW() - INTERVAL 7 DAY
     ORDER BY waktu DESC
-    LIMIT {$chartLimit}
+    LIMIT 1500
 ");
 
 $waktu = []; $suhu = []; $udara = []; $tanah = []; $cahaya = [];
 
-while ($row = mysqli_fetch_assoc($query)) {
+while ($row = mysqli_fetch_assoc($historyQuery)) {
     $waktu[]  = date('d-m H:i', strtotime($row['waktu']));
     $suhu[]   = (float) $row['suhuUdara'];
     $udara[]  = (float) $row['kelUdara'];
@@ -214,8 +240,8 @@ $latestDataJson = json_encode([
     <section class="chart-box">
         <div class="chart-header">
             <div>
-                <div class="chart-title">Grafik Sensor</div>
-                <div class="chart-sub">7 hari terakhir · real-time</div>
+                <div class="chart-title">Grafik Sensor Harian</div>
+                <div class="chart-sub">±15 titik harian · spline · pan/zoom</div>
             </div>
             <div class="chart-tabs">
                 <button class="chart-tab active-temp" data-chart="suhu"   onclick="showChart('suhu')">Suhu</button>
@@ -230,7 +256,19 @@ $latestDataJson = json_encode([
             <div class="stat-cell"><span class="stat-k">MIN</span><span class="stat-v" id="statMin"><?= $statSuhu['min'] ?><small>°C</small></span></div>
             <div class="stat-cell"><span class="stat-k">MAX</span><span class="stat-v" id="statMax"><?= $statSuhu['max'] ?><small>°C</small></span></div>
         </div>
-        <canvas id="chartSensor"></canvas>
+        <div class="chart-stage">
+            <div class="chart-toolbar">
+                <label class="smoothness-control" for="curveSmoothness">
+                    <span>Smoothing:</span>
+                    <input id="curveSmoothness" type="range" min="0" max="1" step="0.01" value="0.55" oninput="updateCurveSmoothness(this.value)">
+                </label>
+            </div>
+            <div id="chartSensor"></div>
+            <div id="chartLoading" class="chart-loading is-visible" aria-hidden="true">
+                <div class="chart-spinner"></div>
+                <div class="chart-loading-text">Memuat grafik amCharts 5...</div>
+            </div>
+        </div>
     </section>
 
     <!-- ── Bottom Grid: Rekomendasi + Ringkasan ──────────────── -->
@@ -413,11 +451,7 @@ $latestDataJson = json_encode([
 
 <!-- ── Inject data ke JS ──────────────────────────────────────── -->
 <script id="page-script">
-    window.chartLabels  = <?= json_encode($waktu) ?>;
-    window.dataSuhu     = <?= json_encode($suhu)   ?>;
-    window.dataUdara    = <?= json_encode($udara)  ?>;
-    window.dataTanah    = <?= json_encode($tanah)  ?>;
-    window.dataCahaya   = <?= json_encode($cahaya) ?>;
+    window.chartData    = <?= json_encode($chartDaily) ?>;
     window.latestData   = <?= $latestDataJson ?>;
     window.chartStats   = {
         suhu:   <?= json_encode($statSuhu)   ?>,

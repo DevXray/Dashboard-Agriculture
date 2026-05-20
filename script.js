@@ -5,25 +5,116 @@
 'use strict';
 
 // ── Chart ───────────────────────────────────────────────
+let sensorRoot = null;
 let sensorChart = null;
-const CHART_JS_SRC = 'https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js';
-let chartJsPromise = null;
+let sensorSeries = null;
+let sensorYAxis = null;
+let sensorChartType = 'suhu';
+let chartSmoothness = 0.55;
+const AMCHARTS_INDEX_SRC = 'https://cdn.amcharts.com/lib/5/index.js';
+const AMCHARTS_XY_SRC = 'https://cdn.amcharts.com/lib/5/xy.js';
+const AMCHARTS_ANIMATED_SRC = 'https://cdn.amcharts.com/lib/5/themes/Animated.js';
+let amChartsPromise = null;
 
-function loadChartJs() {
-  if (window.Chart) return Promise.resolve();
-  if (chartJsPromise) return chartJsPromise;
+function loadExternalScript(src, testFn) {
+  if (testFn && testFn()) return Promise.resolve();
 
-  chartJsPromise = new Promise((resolve, reject) => {
+  return new Promise((resolve, reject) => {
+    const existing = document.querySelector(`script[data-amcharts-src="${src}"]`);
+    if (existing) {
+      existing.addEventListener('load', () => resolve(), { once: true });
+      existing.addEventListener('error', () => reject(new Error(`Gagal memuat ${src}`)), { once: true });
+      return;
+    }
+
     const script = document.createElement('script');
-    script.src = CHART_JS_SRC;
+    script.src = src;
     script.defer = true;
-    script.dataset.chartjs = 'true';
+    script.dataset.amchartsSrc = src;
     script.onload = () => resolve();
-    script.onerror = () => reject(new Error('Gagal memuat Chart.js'));
+    script.onerror = () => reject(new Error(`Gagal memuat ${src}`));
     document.head.appendChild(script);
   });
+}
 
-  return chartJsPromise;
+function loadAmCharts5() {
+  if (window.am5 && window.am5xy && window.am5themes_Animated) return Promise.resolve();
+  if (amChartsPromise) return amChartsPromise;
+
+  amChartsPromise = (async () => {
+    await loadExternalScript(AMCHARTS_INDEX_SRC, () => window.am5);
+    await loadExternalScript(AMCHARTS_XY_SRC, () => window.am5xy);
+    await loadExternalScript(AMCHARTS_ANIMATED_SRC, () => window.am5themes_Animated);
+  })();
+
+  return amChartsPromise;
+}
+
+function showChartLoading(isVisible, message = 'Memuat grafik amCharts 5...') {
+  const overlay = document.getElementById('chartLoading');
+  if (!overlay) return;
+
+  overlay.classList.toggle('is-visible', !!isVisible);
+  overlay.setAttribute('aria-hidden', String(!isVisible));
+  const text = overlay.querySelector('.chart-loading-text');
+  if (text && message) text.textContent = message;
+}
+
+function disposeChart() {
+  if (sensorRoot) {
+    sensorRoot.dispose();
+    sensorRoot = null;
+  }
+  sensorChart = null;
+  sensorSeries = null;
+  sensorYAxis = null;
+}
+
+function getChartSeriesMeta(type) {
+  const meta = {
+    suhu:   { label: 'Suhu Udara',        unit: '°C', stroke: '#fb923c', fill: '#fb923c', active: 'active-temp'  },
+    udara:  { label: 'Kelembapan Udara',  unit: '%',  stroke: '#38bdf8', fill: '#38bdf8', active: 'active-humid' },
+    tanah:  { label: 'Kelembapan Tanah',  unit: '%',  stroke: '#34d399', fill: '#34d399', active: 'active-soil'  },
+    cahaya: { label: 'Intensitas Cahaya', unit: ' Lux', stroke: '#facc15', fill: '#facc15', active: 'active-light' },
+  };
+
+  return meta[type] || meta.suhu;
+}
+
+function getChartData(type) {
+  const rows = Array.isArray(window.chartData) ? window.chartData : [];
+  return rows
+    .filter(row => row && typeof row.date === 'number')
+    .map(row => ({
+      date: row.date,
+      value: Number(row[type]) || 0,
+      label: row.label || '',
+    }));
+}
+
+function updateCurveSmoothness(value) {
+  const parsed = Math.max(0, Math.min(1, Number.parseFloat(value)) || 0);
+  chartSmoothness = parsed;
+
+  const valueEl = document.getElementById('curveSmoothnessValue');
+  if (valueEl) valueEl.textContent = parsed.toFixed(2);
+
+  if (sensorSeries) {
+    sensorSeries.set('tension', 1 - parsed);
+  }
+}
+
+function updateStatsBar(type) {
+  const stats = window.chartStats?.[type];
+  const meta = getChartSeriesMeta(type);
+  if (!stats) return;
+
+  const avgEl = document.getElementById('statAvg');
+  const minEl = document.getElementById('statMin');
+  const maxEl = document.getElementById('statMax');
+  if (avgEl) avgEl.innerHTML = `${stats.avg}<small>${meta.unit}</small>`;
+  if (minEl) minEl.innerHTML = `${stats.min}<small>${meta.unit}</small>`;
+  if (maxEl) maxEl.innerHTML = `${stats.max}<small>${meta.unit}</small>`;
 }
 
 const CHART_COLORS = {
@@ -33,66 +124,177 @@ const CHART_COLORS = {
   cahaya: { stroke: '#facc15', cls: 'active-light' },
 };
 
-async function createChart(label, data, times, color, unit = '%') {
-  const canvas = document.getElementById('chartSensor');
-  if (!canvas) return;
+async function createChart(type) {
+  const container = document.getElementById('chartSensor');
+  if (!container) return;
 
-  await loadChartJs();
+  const meta = getChartSeriesMeta(type);
+  const chartData = getChartData(type);
 
-  try { if (sensorChart) { sensorChart.destroy(); sensorChart = null; } }
-  catch(e) { sensorChart = null; }
+  showChartLoading(true, 'Memuat grafik amCharts 5...');
+  await loadAmCharts5();
 
-  const isLight = document.documentElement.getAttribute('data-theme') === 'light';
-  const textColor  = isLight ? '#6b7280' : '#2d6650';
-  const tooltipBg  = isLight ? '#ffffff' : '#0b1f15';
-  const gridColor  = isLight ? 'rgba(0,0,0,0.04)' : 'rgba(255,255,255,0.03)';
+  disposeChart();
 
-  const ctx = canvas.getContext('2d');
-  const gradient = ctx.createLinearGradient(0, 0, 0, 220);
-  gradient.addColorStop(0, color + '44');
-  gradient.addColorStop(1, color + '00');
+  if (!chartData.length) {
+    container.innerHTML = '<div class="chart-empty">Tidak ada data harian untuk ditampilkan.</div>';
+    showChartLoading(false);
+    return;
+  }
 
-  const avg = data.length ? (data.reduce((a,b) => a+b, 0) / data.length).toFixed(1) : 0;
+  sensorRoot = am5.Root.new('chartSensor');
+  sensorRoot.setThemes([am5themes_Animated.new(sensorRoot)]);
 
-  sensorChart = new Chart(ctx, {
-    type: 'line',
-    data: {
-      labels: times,
-      datasets: [{
-        label, data,
-        borderColor: color, backgroundColor: gradient,
-        fill: true, tension: 0.4, borderWidth: 2,
-        pointRadius: 0, pointHoverRadius: 5,
-        pointHoverBackgroundColor: color,
-      }]
-    },
-    options: {
-      responsive: true,
-      animation: { duration: 500 },
-      interaction: { mode: 'index', intersect: false },
-      plugins: {
-        legend: { display: false },
-        tooltip: {
-          backgroundColor: tooltipBg,
-          borderColor: color, borderWidth: 1,
-          titleColor: color, bodyColor: color,
-          padding: 10,
-          callbacks: { label: ctx => `${ctx.parsed.y}${unit}` },
-        }
-      },
-      scales: {
-        x: {
-          grid: { color: gridColor, drawBorder: false },
-          ticks: { color: textColor, font: { family: 'JetBrains Mono', size: 11 }, maxTicksLimit: 8 },
-        },
-        y: {
-          min: 0,
-          grid: { color: gridColor, drawBorder: false },
-          ticks: { color: textColor, font: { family: 'JetBrains Mono', size: 11 }, callback: v => v + unit },
-        },
-      },
-    },
+  const themeIsLight = document.documentElement.getAttribute('data-theme') === 'light';
+  const textColor = themeIsLight ? am5.color(0x6b7280) : am5.color(0x6ee7b7);
+  const gridColor = themeIsLight ? am5.color(0x000000) : am5.color(0xffffff);
+  const backgroundColor = themeIsLight ? am5.color(0xffffff) : am5.color(0x0b1f15);
+  const strokeColor = am5.color(parseInt(meta.stroke.slice(1), 16));
+
+  sensorChart = sensorRoot.container.children.push(am5xy.XYChart.new(sensorRoot, {
+    panX: true,
+    panY: false,
+    wheelX: 'panX',
+    wheelY: 'zoomX',
+    pinchZoomX: true,
+    layout: sensorRoot.verticalLayout,
+    maxTooltipDistance: 0,
+  }));
+
+  const xRenderer = am5xy.AxisRendererX.new(sensorRoot, {
+    minGridDistance: 40,
+    strokeOpacity: 0.12,
   });
+  xRenderer.labels.template.setAll({
+    fill: textColor,
+    fontSize: 11,
+    fontFamily: 'JetBrains Mono',
+    paddingTop: 8,
+  });
+  xRenderer.grid.template.setAll({ stroke: gridColor, strokeOpacity: themeIsLight ? 0.05 : 0.08 });
+
+  const yRenderer = am5xy.AxisRendererY.new(sensorRoot, {
+    strokeOpacity: 0.12,
+  });
+  yRenderer.labels.template.setAll({
+    fill: textColor,
+    fontSize: 11,
+    fontFamily: 'JetBrains Mono',
+  });
+  yRenderer.grid.template.setAll({ stroke: gridColor, strokeOpacity: themeIsLight ? 0.04 : 0.08 });
+
+  const xAxis = sensorChart.xAxes.push(am5xy.DateAxis.new(sensorRoot, {
+    baseInterval: { timeUnit: 'day', count: 1 },
+    renderer: xRenderer,
+    tooltipDateFormat: 'dd MMM yyyy',
+    markUnitChange: false,
+    extraMin: 0.02,
+    extraMax: 0.05,
+  }));
+
+  sensorYAxis = sensorChart.yAxes.push(am5xy.ValueAxis.new(sensorRoot, {
+    renderer: yRenderer,
+    min: 0,
+    extraMax: 0.15,
+  }));
+
+  xAxis.set('tooltip', am5.Tooltip.new(sensorRoot, {
+    labelText: '{valueX.formatDate("dd MMM yyyy")}',
+    getFillFromSprite: false,
+    autoTextColor: false,
+    background: am5.RoundedRectangle.new(sensorRoot, {
+      fill: backgroundColor,
+      fillOpacity: 0.96,
+      stroke: strokeColor,
+      strokeWidth: 1,
+      cornerRadiusTL: 10,
+      cornerRadiusTR: 10,
+      cornerRadiusBL: 10,
+      cornerRadiusBR: 10,
+    }),
+  }));
+
+  sensorYAxis.set('tooltip', am5.Tooltip.new(sensorRoot, {
+    labelText: '{valueY.formatNumber("#,###.##")}'+meta.unit,
+    getFillFromSprite: false,
+    autoTextColor: false,
+    background: am5.RoundedRectangle.new(sensorRoot, {
+      fill: backgroundColor,
+      fillOpacity: 0.96,
+      stroke: strokeColor,
+      strokeWidth: 1,
+      cornerRadiusTL: 10,
+      cornerRadiusTR: 10,
+      cornerRadiusBL: 10,
+      cornerRadiusBR: 10,
+    }),
+  }));
+
+  sensorSeries = sensorChart.series.push(am5xy.SmoothedXLineSeries.new(sensorRoot, {
+    name: meta.label,
+    xAxis,
+    yAxis: sensorYAxis,
+    valueXField: 'date',
+    valueYField: 'value',
+    tension: 1 - chartSmoothness,
+    connect: true,
+    stroke: strokeColor,
+    fill: strokeColor,
+    fillOpacity: 0.08,
+    tooltip: am5.Tooltip.new(sensorRoot, {
+      labelText: '{name}\n{valueX.formatDate("dd MMM yyyy")}\n{valueY.formatNumber("#,###.##")}'+meta.unit,
+      getFillFromSprite: false,
+      autoTextColor: false,
+      background: am5.RoundedRectangle.new(sensorRoot, {
+        fill: backgroundColor,
+        fillOpacity: 0.96,
+        stroke: strokeColor,
+        strokeWidth: 1,
+        cornerRadiusTL: 10,
+        cornerRadiusTR: 10,
+        cornerRadiusBL: 10,
+        cornerRadiusBR: 10,
+      }),
+    }),
+  }));
+
+  sensorSeries.strokes.template.setAll({
+    stroke: strokeColor,
+    strokeWidth: 3,
+  });
+  sensorSeries.fills.template.setAll({
+    visible: true,
+    fill: strokeColor,
+    fillOpacity: 0.08,
+  });
+  sensorSeries.bullets.push(() => am5.Bullet.new(sensorRoot, {
+    sprite: am5.Circle.new(sensorRoot, {
+      radius: 4,
+      fill: backgroundColor,
+      stroke: strokeColor,
+      strokeWidth: 2,
+    }),
+  }));
+
+  sensorChart.set('cursor', am5xy.XYCursor.new(sensorRoot, {
+    behavior: 'none',
+    xAxis,
+    yAxis: sensorYAxis,
+  }));
+
+  const scrollbarX = am5.Scrollbar.new(sensorRoot, { orientation: 'horizontal' });
+  sensorChart.set('scrollbarX', scrollbarX);
+  sensorChart.topAxesContainer.children.push(scrollbarX);
+
+  xAxis.data.setAll(chartData);
+  sensorSeries.data.setAll(chartData);
+
+  sensorSeries.events.once('datavalidated', () => {
+    showChartLoading(false);
+  });
+
+  sensorChart.appear(800, 100);
+  sensorSeries.appear(1000);
 }
 
 async function showChart(type) {
@@ -102,13 +304,10 @@ async function showChart(type) {
   const btn = document.querySelector(`[data-chart="${type}"]`);
   if (btn) btn.classList.add(CHART_COLORS[type]?.cls);
 
-  const labels = window.chartLabels || [];
-  switch (type) {
-    case 'suhu':   await createChart('Suhu Udara',        window.dataSuhu,   labels, '#fb923c', '°C'); break;
-    case 'udara':  await createChart('Kelembapan Udara',  window.dataUdara,  labels, '#38bdf8', '%');  break;
-    case 'tanah':  await createChart('Kelembapan Tanah',  window.dataTanah,  labels, '#34d399', '%');  break;
-    case 'cahaya': await createChart('Intensitas Cahaya', window.dataCahaya, labels, '#facc15', ' Lux');  break;
-  }
+  sensorChartType = type;
+  updateStatsBar(type);
+  updateCurveSmoothness(document.getElementById('curveSmoothness')?.value ?? chartSmoothness);
+  await createChart(type);
 }
 
 // ── Real-Time SSE Listener (PENGGANTI AUTO-REFRESH) ──────
@@ -137,28 +336,7 @@ function initRealTime() {
     updateSensorLive('.type-soil', tanah, '%', 100);
     updateSensorLive('.type-light', cahaya, ' Lux', 80000);
 
-    // 2. Tambahkan data ke Chart secara dinamis
-    if (window.chartLabels && sensorChart) {
-      window.chartLabels.push(waktu);
-      window.dataSuhu.push(suhu);
-      window.dataUdara.push(udara);
-      window.dataTanah.push(tanah);
-      window.dataCahaya.push(cahaya);
-
-      // Jaga agar grafik tidak terlalu padat (maksimal 50 titik terakhir)
-      if (window.chartLabels.length > 50) {
-        window.chartLabels.shift();
-        window.dataSuhu.shift();
-        window.dataUdara.shift();
-        window.dataTanah.shift();
-        window.dataCahaya.shift();
-      }
-
-      // Update grafik tanpa animasi berulang ('none' mode)
-      sensorChart.update('none');
-    }
-
-    // 3. Update Bar Kesehatan di Sidebar
+    // 2. Update Bar Kesehatan di Sidebar
     updateHealthBarLive('.fill-green', tanah);
     updateHealthBarLive('.fill-cyan', udara);
     updateHealthBarLive('.fill-amber', Math.max(0, 100 - Math.abs(suhu - 28) * 8));
@@ -265,9 +443,11 @@ function showToast(msg, type = 'info') {
 }
 
 function createToastContainer() {
-  const c = document.createElement('div'); c.id = 'toastContainer';
+  const c = document.createElement('div');
+  c.id = 'toastContainer';
   c.style.cssText = 'position:fixed;bottom:24px;right:24px;z-index:9999;display:flex;flex-direction:column;gap:8px;';
-  document.body.appendChild(c); return c;
+  document.body.appendChild(c);
+  return c;
 }
 
 // ── Sensor alert check ───────────────────────────────────
@@ -308,11 +488,34 @@ function initTheme() {
   };
 }
 
+function renderSparkBars() {
+  document.querySelectorAll('.spark-bars').forEach(container => {
+    try {
+      const vals = JSON.parse(container.dataset.vals || '[]');
+      if (!vals.length) return;
+
+      const max = Math.max(...vals);
+      const min = Math.min(...vals);
+      const range = max - min || 1;
+
+      container.innerHTML = vals.map(v => {
+        const pct = Math.max(15, ((v - min) / range) * 100);
+        return `<div class="spark-bar" style="height:${pct}%"></div>`;
+      }).join('');
+    } catch(e) {
+      container.innerHTML = '';
+    }
+  });
+}
+
 // ── Inisialisasi ─────────────────────────────────────────
 function initDashboard() {
   const activeTab = document.querySelector('.chart-tab[class*="active-"]');
   const type = activeTab ? activeTab.dataset.chart : 'suhu';
-  if (document.getElementById('chartSensor') && window.chartLabels) showChart(type);
+  updateCurveSmoothness(document.getElementById('curveSmoothness')?.value || chartSmoothness);
+  if (document.getElementById('chartSensor') && window.chartData) showChart(type);
+
+  renderSparkBars();
 
   // Inisiasi animasi pertama kali
   document.querySelectorAll('.health-fill').forEach(el => {
@@ -330,6 +533,7 @@ function initRiwayat() {
     sseConnection.close();
     sseConnection = null;
   }
+  disposeChart();
 }
 
 function exportCSV() {
