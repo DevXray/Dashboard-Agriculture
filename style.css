@@ -245,11 +245,11 @@ body { font-family:'Sora',sans-serif; background:var(--bg-void); color:var(--tx-
   position:relative;
   min-height:360px;
   border-radius:14px;
-  overflow:hidden;
+  overflow:visible;
   border:1px solid var(--bd-faint);
   background:linear-gradient(180deg, rgba(255,255,255,0.01), rgba(255,255,255,0));
 }
-#chartSensor { position:absolute; top:0; left:0; right:0; bottom:0; width:100%; height:100%; }
+#chartSensor { width:100%; min-height:340px; }
 .chart-loading {
   position:absolute; inset:0;
   display:flex; flex-direction:column; align-items:center; justify-content:center;
@@ -587,12 +587,9 @@ body { font-family:'Sora',sans-serif; background:var(--bg-void); color:var(--tx-
     max-width:none;
   }
 
-  .chart-stage,
-  #chartSensor,
-  .chart-empty {
-    min-height:240px;
-    height:240px;
-  }
+  .chart-stage { min-height:260px; }
+  #chartSensor { min-height:240px; }
+  .chart-empty { min-height:240px; height:240px; }
 
   #statsBar {
     gap: 6px;

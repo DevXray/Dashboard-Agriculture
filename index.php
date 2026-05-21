@@ -174,6 +174,7 @@ $latestDataJson = json_encode([
     <title>AgroMonitor — Dashboard</title>
     <link rel="icon" href="img/kangkung.png">
     <link rel="stylesheet" href="style.css?v=<?= filemtime(__DIR__ . '/style.css') ?>">
+    <script src="https://cdn.jsdelivr.net/npm/apexcharts@3.49.0/dist/apexcharts.min.js"></script>
 </head>
 <body>
 

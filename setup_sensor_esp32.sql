@@ -19,7 +19,8 @@ CREATE TABLE IF NOT EXISTS DataSensor (
   longitude DECIMAL(10,7) NOT NULL DEFAULT 0,
   waktu TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
-  INDEX idx_waktu (waktu)
+  INDEX idx_waktu (waktu),
+  INDEX idx_waktu_id (waktu, id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS DeviceConfig (
