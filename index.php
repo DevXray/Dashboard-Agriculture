@@ -348,8 +348,29 @@ $latestDataJson = json_encode([
 <aside class="sidebar-panel">
 
     <!-- Kontrol Pompa -->
-    <div class="side-box">
+    <div class="side-box" style="position: relative;">
         <div class="side-box-title">Kontrol Pompa Irigasi</div>
+
+        <!-- Theme Toggle Mobile -->
+        <div class="mobile-theme-wrapper">
+            <div class="toggleWrapper">
+              <input class="input" id="dn-mobile" type="checkbox" />
+              <label class="toggle" for="dn-mobile">
+                <span class="toggle__handler">
+                  <span class="crater crater--1"></span>
+                  <span class="crater crater--2"></span>
+                  <span class="crater crater--3"></span>
+                </span>
+                <span class="star star--1"></span>
+                <span class="star star--2"></span>
+                <span class="star star--3"></span>
+                <span class="star star--4"></span>
+                <span class="star star--5"></span>
+                <span class="star star--6"></span>
+              </label>
+            </div>
+        </div>
+
         <div class="pump-visual">
             <div id="pumpRing" class="pump-ring <?= $isPumpOn ? 'on' : ($isPumpAuto ? 'auto' : '') ?>">
                 <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor"

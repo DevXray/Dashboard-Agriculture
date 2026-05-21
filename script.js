@@ -471,29 +471,36 @@ function checkSensorAlerts() {
 // ── Theme toggle ─────────────────────────────────────────
 function initTheme() {
   const toggleInput = document.getElementById('dn');
-  if (!toggleInput) return;
+  const toggleMobileInput = document.getElementById('dn-mobile');
+  
+  // Jika tidak ada keduanya, jangan lakukan apa-apa
+  if (!toggleInput && !toggleMobileInput) return;
 
   const apply = (th) => {
     if (th === 'light') { 
       document.documentElement.setAttribute('data-theme', 'light'); 
-      toggleInput.checked = false; // Sun mode (checked = false in this toggle pattern typically, let's reverse if needed: checked is Moon)
+      if (toggleInput) toggleInput.checked = false; 
+      if (toggleMobileInput) toggleMobileInput.checked = false;
     } else { 
       document.documentElement.removeAttribute('data-theme');
-      toggleInput.checked = true; // Moon mode
+      if (toggleInput) toggleInput.checked = true; 
+      if (toggleMobileInput) toggleMobileInput.checked = true;
     }
   };
   
   apply(localStorage.getItem('agro-theme') || 'dark');
   
-  toggleInput.addEventListener('change', (e) => {
-    // If checked = true -> dark mode (moon), else -> light mode (sun)
+  const handleChange = (e) => {
     const next = e.target.checked ? 'dark' : 'light';
     localStorage.setItem('agro-theme', next); 
     apply(next);
     
     const activeTab = document.querySelector('.chart-tab[class*="active-"]');
     if (activeTab?.dataset?.chart) showChart(activeTab.dataset.chart);
-  });
+  };
+
+  if (toggleInput) toggleInput.onchange = handleChange;
+  if (toggleMobileInput) toggleMobileInput.onchange = handleChange;
 }
 
 function renderSparkBars() {
@@ -617,6 +624,8 @@ function navigateTo(url, push = true) {
       } else if (pageName === 'riwayat.php') {
         initRiwayat();
       }
+
+      initTheme();
     })
     .catch(err => {
       console.error('SPA Error:', err);
