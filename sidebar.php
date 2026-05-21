@@ -184,9 +184,24 @@ echo strtr(date('l, d F Y'), array_merge($hari, $bulan));
         </div>
 
         <!-- Theme toggle -->
-        <button class="theme-btn" id="themeToggle">
-            <span id="themeText">☀️ Tema Terang</span>
-        </button>
+        <div class="theme-toggle-container" style="display:flex; justify-content:center; margin-top:20px; min-height: 50px;">
+            <div class="toggleWrapper">
+              <input class="input" id="dn" type="checkbox" />
+              <label class="toggle" for="dn" id="themeToggleLabel">
+                <span class="toggle__handler">
+                  <span class="crater crater--1"></span>
+                  <span class="crater crater--2"></span>
+                  <span class="crater crater--3"></span>
+                </span>
+                <span class="star star--1"></span>
+                <span class="star star--2"></span>
+                <span class="star star--3"></span>
+                <span class="star star--4"></span>
+                <span class="star star--5"></span>
+                <span class="star star--6"></span>
+              </label>
+            </div>
+        </div>
     </div>
 
 </aside>

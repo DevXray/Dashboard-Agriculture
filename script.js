@@ -470,22 +470,30 @@ function checkSensorAlerts() {
 
 // ── Theme toggle ─────────────────────────────────────────
 function initTheme() {
-  const btn = document.getElementById('themeToggle');
-  const label = document.getElementById('themeText');
-  if (!btn) return;
+  const toggleInput = document.getElementById('dn');
+  if (!toggleInput) return;
 
   const apply = (th) => {
-    if (th === 'light') { document.documentElement.setAttribute('data-theme', 'light'); if (label) label.textContent = '🌙 Tema Gelap'; } 
-    else { document.documentElement.removeAttribute('data-theme'); if (label) label.textContent = '☀️ Tema Terang'; }
+    if (th === 'light') { 
+      document.documentElement.setAttribute('data-theme', 'light'); 
+      toggleInput.checked = false; // Sun mode (checked = false in this toggle pattern typically, let's reverse if needed: checked is Moon)
+    } else { 
+      document.documentElement.removeAttribute('data-theme');
+      toggleInput.checked = true; // Moon mode
+    }
   };
   
   apply(localStorage.getItem('agro-theme') || 'dark');
-  btn.onclick = () => {
-    const next = document.documentElement.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
-    localStorage.setItem('agro-theme', next); apply(next);
+  
+  toggleInput.addEventListener('change', (e) => {
+    // If checked = true -> dark mode (moon), else -> light mode (sun)
+    const next = e.target.checked ? 'dark' : 'light';
+    localStorage.setItem('agro-theme', next); 
+    apply(next);
+    
     const activeTab = document.querySelector('.chart-tab[class*="active-"]');
     if (activeTab?.dataset?.chart) showChart(activeTab.dataset.chart);
-  };
+  });
 }
 
 function renderSparkBars() {
